@@ -147,7 +147,7 @@ for (k in 1:length(temper)){
                     logic.old = init.trees[[t]]
                }else{logic.old = trees[[t]]}
 
-               model = sw.move(P=P, logic.old=logic.old,max.num.tree=5,max.num.leaf=5,dist=dist.true)
+               model = sw.move(P=P, logic.old=logic.old,max.num.tree=3,max.num.leaf=5,dist=dist.true)
                logic.new = change.model(model=model,logic=logic.old)
                other.regs = trees[-t]
      
