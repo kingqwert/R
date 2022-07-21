@@ -1,0 +1,33 @@
+colnames(df)
+new_cases_smoothed_per_million
+new_tests_smoothed_per_thousand
+people_fully_vaccinated_per_hundred
+stringency_index
+gdp_per_capita
+human_development_index
+diabetes_prevalence
+life_expectancy
+hospital_beds_per_thousand
+temparature
+rainfall
+retail
+grocery
+transit
+work
+park
+resident
+median_age
+Population_14
+Population_65
+Population_density
+Mortality_rate_infant
+Current health expenditure
+Surface area
+Unemployment
+PM2.5
+International migrant stock
+houseshold_size
+democracy
+Asia
+date2
+location

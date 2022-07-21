@@ -1,0 +1,424 @@
+---
+title: "main"
+output: word_document
+---
+
+```{r}
+library(tidyverse); library(socviz); library(zoo); library(tidysynth) 
+library(lubridate); library(furrr); library(panelView); library(openxlsx)
+```
+
+```{r}
+df <- read_csv("data/df.csv")
+```
+
+
+```{r}
+colnames(df)
+```
+
+```{r}
+plot_placebos <- function(data,time_window=NULL,prune=TRUE){
+  UseMethod("plot_placebos")
+}
+
+#' @export
+plot_placebos <- function(data,time_window=NULL,prune=TRUE){
+
+  # Check if .meta is in data.
+  if(!(".meta" %in% colnames(data))){stop("`.meta` column has been removed. `.meta` column needs to be included for `generte_control()` to work.")}
+
+  # Grab meta data
+  trt_time <- data$.meta[[1]]$treatment_time[1]
+  time_index <- data$.meta[[1]]$time_index[1]
+  treatment_unit <- data$.meta[[1]]$treatment_unit[1]
+  unit_index <- data$.meta[[1]]$unit_index[1]
+  outcome_name <- data$.meta[[1]]$outcome[1]
+
+  # If no time window is specified for the plot, plot the entire series
+  if(is.null(time_window)){ time_window <- unique(data$.original_data[[1]][[time_index]])}
+
+  # Generate plot data
+  plot_data <-
+    data %>%
+    grab_synthetic_control(placebo = TRUE) %>%
+    dplyr::mutate(diff = real_y-synth_y) %>%
+    dplyr::filter(time_unit %in% time_window) %>%
+    dplyr::mutate(type_text = ifelse(.placebo==0,treatment_unit,"control units"),
+                  type_text = factor(type_text,levels=c(treatment_unit,"control units")))
+
+
+  # Pruning implementation-- if one of the donors falls outside two standard
+  # deviations of the rest of the pool, it's dropped.
+  caption <- ""
+  if (prune){
+
+    # Gather significance field
+    sig_data = data %>% grab_significance(time_window = time_window)
+
+    # Treated units Pre-Period RMSPE
+    thres <-
+      sig_data %>%
+      dplyr::filter(type=="Treated") %>%
+      dplyr::pull(pre_mspe) %>%
+      sqrt(.)
+
+    # Only retain units that are 10 times the treated unit RMSPE.
+    retain_ <-
+      sig_data %>%
+      dplyr::select(unit_name,pre_mspe) %>%
+      dplyr::filter(sqrt(pre_mspe) <= thres*10) %>%
+      dplyr::pull(unit_name)
+
+    plot_data <- plot_data %>% dplyr::filter(.id %in% retain_)
+    caption <- "Pruned all placebo cases with a pre-period RMSPE exceeding two times the treated unit's pre-period RMSPE."
+  }
+
+  # Generate plot
+  plot_data %>%
+    ggplot2::ggplot(ggplot2::aes(time_unit,diff,group=.id,
+                                 color=type_text,
+                                 alpha=type_text,
+                                 size=type_text)) +
+    ggplot2::geom_hline(yintercept = 0,color="black",linetype=2) +
+    ggplot2::geom_vline(xintercept = trt_time,color="black",linetype=3) +
+    ggplot2::geom_line() +
+    ggplot2::scale_color_manual(values=c("#b41e7c","grey60")) +
+    ggplot2::scale_alpha_manual(values=c(1,.4)) +
+    ggplot2::scale_size_manual(values=c(1,.5)) +
+    ggplot2::labs(color="",alpha="",size="",y=outcome_name,x=time_index,
+                  title=paste0("Difference of each '",unit_index,"' in the donor pool"),
+                  caption = caption) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(legend.position="bottom")
+}
+
+
+grab_significance <- function(data,time_window = NULL){
+  UseMethod("grab_significance")
+}
+
+#' @export
+grab_significance <- function(data,time_window = NULL){
+
+  # Check if .synthetic_control is in data.
+  if(!(".synthetic_control" %in% colnames(data))){stop("`.synthetic_control` column is missing. Please run `generate_control()` to generate this data field.")}
+  if(!(".meta" %in% colnames(data))){ stop("`.meta` column is missing. `.meta` column needs to be included for `generte_control()` to work.")}
+
+
+  # Grab meta data
+  trt_time <- data$.meta[[1]]$treatment_time
+  time_index <- data$.meta[[1]]$time_index
+
+  # If no time window is specified for the table, calculate the entire series
+  if(is.null(time_window)){
+    time_window <- unique(data$.original_data[[1]][[time_index]])
+  }else{
+    if(max(time_window) <= trt_time){
+      stop("The specified time window must contain post-treatment time units to calculate the post-MSPE. The current window only contains pretreatment periods. Please adjust.")
+    }
+  }
+
+  # Formulate the output data using the donor and treated synthetic controls
+  data %>%
+    grab_synthetic_control(placebo = TRUE) %>%
+    dplyr::filter(time_unit %in% time_window) %>%
+    dplyr::group_by(.id, period = ifelse(time_unit <= trt_time,"pre_mspe","post_mspe"))  %>%
+    dplyr::summarize(.placebo = mean(.placebo),
+                     mspe = sum((real_y - synth_y)^2)/dplyr::n(),.groups='drop') %>%
+    tidyr::pivot_wider(names_from = period,values_from = mspe) %>%
+    dplyr::mutate(mspe_ratio = post_mspe/pre_mspe) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(dplyr::desc(mspe_ratio)) %>%
+    dplyr::mutate(rank = dplyr::row_number(),
+                  fishers_exact_pvalue = rank / max(rank),
+                  z_score = (mspe_ratio-mean(mspe_ratio))/stats::sd(mspe_ratio),
+                  type = ifelse(.placebo==0,"Treated","Donor")) %>%
+    dplyr::select(unit_name=.id,type,pre_mspe,post_mspe,dplyr::everything(),-.placebo)
+}
+```
+
+```{r, results="hide"}
+generate_predictor_period <- function(df,x){
+  generate_predictor(df, time_window = x,
+                     `Number of tests for COVID-19` = mean(new_tests_smoothed_per_thousand, na.rm = TRUE),
+                     `COVID-19 vaccination` = mean(people_fully_vaccinated_per_hundred, na.rm = TRUE),
+                     `Stringency index` = mean(stringency_index, na.rm = TRUE),
+                     Temparature = mean(temparature, na.rm = TRUE),
+                     Precipitation = mean(rainfall, na.rm = TRUE),
+                     `Human mobility (retail and recreation)` = mean(retail, na.rm = TRUE),
+                     `Human mobility (groceries and pharmacies)` = mean(grocery, na.rm = TRUE),
+                     `Human mobility (transit stations)` = mean(transit, na.rm = TRUE),
+                     `Human mobility (workplaces)` = mean(work, na.rm = TRUE),
+                     `Human mobility (parks)` = mean(park, na.rm = TRUE),
+                     `Human mobility (residential)` = mean(resident, na.rm = TRUE)
+                     )
+}
+
+generate_predictor_spot <- function(df,x){
+  generate_predictor(df, time_window = x,
+                     `4-week lagged cases` = new_cases_smoothed_per_million,
+                     Age = median_age,
+                     `Population (0-14)` = Population_14,
+                     `Population (65-)` = Population_65,
+                     `Population density` = Population_density,
+                     `Electoral democracy index` = democracy,
+                     `Infant mortality rate` = Mortality_rate_infant,
+                     `Gross domestic product (GDP)`  = gdp_per_capita,
+                     `Human Development Index` = human_development_index,
+                     `Diabetes prevalence` = diabetes_prevalence,
+                     `Health expenditure` = `Current health expenditure`,
+                     life_expectancy = life_expectancy,
+                   #  `Land area` = `Land area`,
+                     `Surface area` = `Surface area`,
+                     `Unemployment rate` = Unemployment,
+                     PM2.5 = PM2.5,
+                     `International migrant stock` = `International migrant stock`,
+                     `Houseshold size` = houseshold_size,
+                     `Number of hospital beds` = hospital_beds_per_thousand,
+                     `Asia flag` = Asia
+                     )
+}
+```
+
+# Olympic day + 7 day 
+```{r, results="hide", include= F}
+res <- df %>% filter(date2 < 75) %>%
+
+  # initial the synthetic control object
+  synthetic_control(outcome = new_cases_smoothed_per_million, # outcome
+                    unit = location, # unit index in the panel data
+                    time = date2, # time index in the panel data
+                    i_unit = "Japan",
+                    i_time = 60, # time period when the intervention occurred
+                    generate_placebos=T # generate placebo synthetic controls (for inference)
+                    ) %>%
+
+       generate_predictor_period(25:60) %>%  
+       generate_predictor_spot(25) %>%
+  
+       generate_predictor(time_window = 32,
+                     cases2 = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 39,
+                     cases3 = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 46,
+                     cases4 = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 53,
+                     cases5 = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 60,
+                     cases6 = new_cases_smoothed_per_million) %>%
+
+  # Generate the fitted weights for the synthetic control
+  generate_weights(optimization_window = 25:60,
+                   optimization_method = "CG", quadopt = "LowRankQP"
+                   ) %>%
+  
+  # Generate the synth
+    generate_control()
+```
+
+
+```{r}
+tmp <- res %>%
+    grab_synthetic_control(placebo = FALSE) %>%
+    mutate(diff = real_y-synth_y)
+
+write_csv(tmp, "res/res_trend_diff_data_plus7days_treattime60.csv")
+```
+
+
+```{r}
+tmp2 <- res %>% dplyr::bind_rows(
+  
+    grab_unit_weights(res,placebo = FALSE) %>%
+      dplyr::mutate(type="Control Unit Weights (W)"),
+
+    grab_predictor_weights(res,placebo = FALSE) %>%
+      dplyr::mutate(type="Variable Weights (V)") %>%
+      dplyr::rename(unit = variable)) %>% 
+  select(unit, weight, type) %>% 
+  na.omit()
+
+write_csv(tmp2, "res/res_weight_data_plus7days_treattime60.csv")
+```
+
+```{r}
+tmp3 <- res %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
+write_csv(tmp3, "res/res_fishers_exact_pvalue_plus7days_treattime60.csv")
+```
+
+```{r}
+tmp4 <- res %>% grab_balance_table() 
+write_csv(tmp4, "res/res_balance_table_plus7days_treattime60.csv")
+```
+
+
+
+```{r}
+res %>% plot_placebos()
+tmp7 <- res %>% plot_placebos()
+tmp7 <- as.data.frame(tmp7$data)
+write_csv(tmp7, "res/res_plot_placebos_plus7days_treattime60.csv")
+```
+
+# Olympic day 
+```{r, results="hide", include= F}
+res <- df %>% filter(date2 < 75) %>%
+
+  # initial the synthetic control object
+  synthetic_control(outcome = new_cases_smoothed_per_million, # outcome
+                    unit = location, # unit index in the panel data
+                    time = date2, # time index in the panel data
+                    i_unit = "Japan",
+                    i_time = 53, # time period when the intervention occurred
+                    generate_placebos=T # generate placebo synthetic controls (for inference)
+                    ) %>%
+
+       generate_predictor_period(25:53) %>%  
+       generate_predictor_spot(25) %>%
+
+       generate_predictor(time_window = 32,
+                     `3-week lagged cases` = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 39,
+                     `2-week lagged cases` = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 46,
+                     `1-week lagged cases` = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 53,
+                     `0-week lagged cases` = new_cases_smoothed_per_million) %>%
+
+  # Generate the fitted weights for the synthetic control
+  generate_weights(optimization_window = 25:53,
+                   optimization_method = "CG", quadopt = "LowRankQP"
+                   ) %>%
+  
+  # Generate the synth
+    generate_control()
+```
+
+
+```{r, fig.width=15, fig.height=10}
+res %>% plot_weights()
+```
+
+```{r}
+tmp <- res %>%
+    grab_synthetic_control(placebo = FALSE) %>%
+    mutate(diff = real_y-synth_y)
+
+write_csv(tmp, "res/res_trend_diff_data_treattime53.csv")
+```
+
+```{r}
+tmp2 <- res %>% dplyr::bind_rows(
+  
+    grab_unit_weights(res,placebo = FALSE) %>%
+      dplyr::mutate(type="Control Unit Weights (W)"),
+
+    grab_predictor_weights(res,placebo = FALSE) %>%
+      dplyr::mutate(type="Variable Weights (V)") %>%
+      dplyr::rename(unit = variable)) %>% 
+  select(unit, weight, type) %>% 
+  na.omit()
+
+write_csv(tmp2, "res/res_weight_data_treattime53.csv")
+```
+
+
+```{r}
+tmp3 <- res %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
+write_csv(tmp3, "res/res_fishers_exact_pvalue_treattime53.csv")
+```
+
+```{r}
+tmp4 <- res %>% grab_balance_table() 
+write_csv(tmp4, "res/res_balance_table_treattime53.csv")
+```
+
+```{r}
+res %>% plot_placebos()
+tmp7 <- res %>% plot_placebos()
+tmp7 <- as.data.frame(tmp7$data)
+write_csv(tmp7, "res/res_plot_placebos_treattime53.csv")
+```
+
+# Olympic day - 7 day 
+```{r, results="hide", include= F}
+res <- df %>% filter(date2 < 75) %>%
+
+  # initial the synthetic control object
+  synthetic_control(outcome = new_cases_smoothed_per_million, # outcome
+                    unit = location, # unit index in the panel data
+                    time = date2, # time index in the panel data
+                    i_unit = "Japan",
+                    i_time = 46, # time period when the intervention occurred
+                    generate_placebos=T # generate placebo synthetic controls (for inference)
+                    ) %>%
+
+       generate_predictor_period(25:46) %>%  
+       generate_predictor_spot(25) %>%
+
+       generate_predictor(time_window = 32,
+                     cases2 = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 39,
+                     cases3 = new_cases_smoothed_per_million) %>%
+       generate_predictor(time_window = 46,
+                     cases4 = new_cases_smoothed_per_million) %>%
+
+  # Generate the fitted weights for the synthetic control
+  generate_weights(optimization_window = 25:46,
+                   optimization_method = "CG", quadopt = "LowRankQP"
+                   ) %>%
+  
+  # Generate the synth
+    generate_control()
+```
+
+
+```{r}
+tmp <- res %>%
+    grab_synthetic_control(placebo = FALSE) %>%
+    mutate(diff = real_y-synth_y)
+
+write_csv(tmp, "res/res_trend_diff_data_minus7days_treattime46.csv")
+```
+
+
+```{r}
+tmp2 <- res %>% dplyr::bind_rows(
+  
+    grab_unit_weights(res,placebo = FALSE) %>%
+      dplyr::mutate(type="Control Unit Weights (W)"),
+
+    grab_predictor_weights(res,placebo = FALSE) %>%
+      dplyr::mutate(type="Variable Weights (V)") %>%
+      dplyr::rename(unit = variable)) %>% 
+  select(unit, weight, type) %>% 
+  na.omit()
+
+write_csv(tmp2, "res/res_weight_data_minus7days_treattime46.csv")
+```
+
+```{r}
+tmp3 <- res %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
+write_csv(tmp3, "res/res_fishers_exact_pvalue_minus7days_treattime46.csv")
+```
+
+```{r}
+tmp4 <- res %>% grab_balance_table() 
+write_csv(tmp4, "res/res_balance_table_minus7days_treattime46.csv")
+```
+
+```{r}
+res %>% plot_placebos()
+tmp7 <- res %>% plot_placebos()
+tmp7 <- as.data.frame(tmp7$data)
+write_csv(tmp7, "res/res_plot_placebos_minus7days_treattime46.csv")
+```
+
+```{r}
+tmp5 <- as.data.frame(colnames(df))
+write_csv(tmp5, "res/variables.csv")
+
+tmp6 <- as.data.frame(unique(df$location))
+write_csv(tmp6, "res/country.csv")
+```
