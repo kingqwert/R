@@ -169,7 +169,6 @@ generate_predictor_spot <- function(df,x){
                      `Diabetes prevalence` = diabetes_prevalence,
                      `Health expenditure` = `Current health expenditure`,
                      life_expectancy = life_expectancy,
-                   #  `Land area` = `Land area`,
                      `Surface area` = `Surface area`,
                      `Unemployment rate` = Unemployment,
                      PM2.5 = PM2.5,
@@ -183,7 +182,7 @@ generate_predictor_spot <- function(df,x){
 
 # Olympic day + 7 day 
 ```{r, results="hide", include= F}
-res <- df %>% filter(date2 < 75) %>%
+res1 <- df %>% filter(date2 < 75) %>%
 
   # initial the synthetic control object
   synthetic_control(outcome = new_cases_smoothed_per_million, # outcome
@@ -219,51 +218,51 @@ res <- df %>% filter(date2 < 75) %>%
 
 
 ```{r}
-tmp <- res %>%
+tmp_1_1 <- res1 %>%
     grab_synthetic_control(placebo = FALSE) %>%
     mutate(diff = real_y-synth_y)
 
-write_csv(tmp, "res/res_trend_diff_data_plus7days_treattime60.csv")
+write_csv(tmp_1_1, "res/res_trend_diff_data_plus7days_treattime60.csv")
 ```
 
 
 ```{r}
-tmp2 <- res %>% dplyr::bind_rows(
+tmp_1_2 <- res1 %>% dplyr::bind_rows(
   
-    grab_unit_weights(res,placebo = FALSE) %>%
+    grab_unit_weights(res1,placebo = FALSE) %>%
       dplyr::mutate(type="Control Unit Weights (W)"),
 
-    grab_predictor_weights(res,placebo = FALSE) %>%
+    grab_predictor_weights(res1,placebo = FALSE) %>%
       dplyr::mutate(type="Variable Weights (V)") %>%
       dplyr::rename(unit = variable)) %>% 
   select(unit, weight, type) %>% 
   na.omit()
 
-write_csv(tmp2, "res/res_weight_data_plus7days_treattime60.csv")
+write_csv(tmp_1_2, "res/res_weight_data_plus7days_treattime60.csv")
 ```
 
 ```{r}
-tmp3 <- res %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
-write_csv(tmp3, "res/res_fishers_exact_pvalue_plus7days_treattime60.csv")
+tmp_1_3 <- res1 %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
+write_csv(tmp_1_3, "res/res_fishers_exact_pvalue_plus7days_treattime60.csv")
 ```
 
 ```{r}
-tmp4 <- res %>% grab_balance_table() 
-write_csv(tmp4, "res/res_balance_table_plus7days_treattime60.csv")
+tmp_1_4 <- res1 %>% grab_balance_table() 
+write_csv(tmp_1_4, "res/res_balance_table_plus7days_treattime60.csv")
 ```
 
 
 
 ```{r}
-res %>% plot_placebos()
-tmp7 <- res %>% plot_placebos()
-tmp7 <- as.data.frame(tmp7$data)
-write_csv(tmp7, "res/res_plot_placebos_plus7days_treattime60.csv")
+res1 %>% plot_placebos()
+tmp_1_5 <- res1 %>% plot_placebos()
+tmp_1_5 <- as.data.frame(tmp_1_5$data)
+write_csv(tmp_1_5, "res/res_plot_placebos_plus7days_treattime60.csv")
 ```
 
 # Olympic day 
 ```{r, results="hide", include= F}
-res <- df %>% filter(date2 < 75) %>%
+res2 <- df %>% filter(date2 < 75) %>%
 
   # initial the synthetic control object
   synthetic_control(outcome = new_cases_smoothed_per_million, # outcome
@@ -297,53 +296,53 @@ res <- df %>% filter(date2 < 75) %>%
 
 
 ```{r, fig.width=15, fig.height=10}
-res %>% plot_weights()
+res2 %>% plot_weights()
 ```
 
 ```{r}
-tmp <- res %>%
+tmp_2_1 <- res2 %>%
     grab_synthetic_control(placebo = FALSE) %>%
     mutate(diff = real_y-synth_y)
 
-write_csv(tmp, "res/res_trend_diff_data_treattime53.csv")
+write_csv(tmp_2_1, "res/res_trend_diff_data_treattime53.csv")
 ```
 
 ```{r}
-tmp2 <- res %>% dplyr::bind_rows(
+tmp_2_2 <- res2 %>% dplyr::bind_rows(
   
-    grab_unit_weights(res,placebo = FALSE) %>%
+    grab_unit_weights(res2,placebo = FALSE) %>%
       dplyr::mutate(type="Control Unit Weights (W)"),
 
-    grab_predictor_weights(res,placebo = FALSE) %>%
+    grab_predictor_weights(res2,placebo = FALSE) %>%
       dplyr::mutate(type="Variable Weights (V)") %>%
       dplyr::rename(unit = variable)) %>% 
   select(unit, weight, type) %>% 
   na.omit()
 
-write_csv(tmp2, "res/res_weight_data_treattime53.csv")
+write_csv(tmp_2_2, "res/res_weight_data_treattime53.csv")
 ```
 
 
 ```{r}
-tmp3 <- res %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
-write_csv(tmp3, "res/res_fishers_exact_pvalue_treattime53.csv")
+tmp_2_3 <- res2 %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
+write_csv(tmp_2_3, "res/res_fishers_exact_pvalue_treattime53.csv")
 ```
 
 ```{r}
-tmp4 <- res %>% grab_balance_table() 
-write_csv(tmp4, "res/res_balance_table_treattime53.csv")
+tmp_2_4 <- res2 %>% grab_balance_table() 
+write_csv(tmp_2_4, "res/res_balance_table_treattime53.csv")
 ```
 
 ```{r}
-res %>% plot_placebos()
-tmp7 <- res %>% plot_placebos()
-tmp7 <- as.data.frame(tmp7$data)
-write_csv(tmp7, "res/res_plot_placebos_treattime53.csv")
+res2 %>% plot_placebos()
+tmp_2_5 <- res2 %>% plot_placebos()
+tmp_2_5 <- as.data.frame(tmp_2_5$data)
+write_csv(tmp_2_5, "res/res_plot_placebos_treattime53.csv")
 ```
 
 # Olympic day - 7 day 
 ```{r, results="hide", include= F}
-res <- df %>% filter(date2 < 75) %>%
+res3 <- df %>% filter(date2 < 75) %>%
 
   # initial the synthetic control object
   synthetic_control(outcome = new_cases_smoothed_per_million, # outcome
@@ -375,50 +374,50 @@ res <- df %>% filter(date2 < 75) %>%
 
 
 ```{r}
-tmp <- res %>%
+tmp_3_1 <- res3 %>%
     grab_synthetic_control(placebo = FALSE) %>%
     mutate(diff = real_y-synth_y)
 
-write_csv(tmp, "res/res_trend_diff_data_minus7days_treattime46.csv")
+write_csv(tmp_3_1, "res/res_trend_diff_data_minus7days_treattime46.csv")
 ```
 
 
 ```{r}
-tmp2 <- res %>% dplyr::bind_rows(
+tmp_3_2 <- res3 %>% dplyr::bind_rows(
   
-    grab_unit_weights(res,placebo = FALSE) %>%
+    grab_unit_weights(res3,placebo = FALSE) %>%
       dplyr::mutate(type="Control Unit Weights (W)"),
 
-    grab_predictor_weights(res,placebo = FALSE) %>%
+    grab_predictor_weights(res3,placebo = FALSE) %>%
       dplyr::mutate(type="Variable Weights (V)") %>%
       dplyr::rename(unit = variable)) %>% 
   select(unit, weight, type) %>% 
   na.omit()
 
-write_csv(tmp2, "res/res_weight_data_minus7days_treattime46.csv")
+write_csv(tmp_3_2, "res/res_weight_data_minus7days_treattime46.csv")
 ```
 
 ```{r}
-tmp3 <- res %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
-write_csv(tmp3, "res/res_fishers_exact_pvalue_minus7days_treattime46.csv")
+tmp_3_3 <- res3 %>% grab_signficance() %>% select(unit_name, type, fishers_exact_pvalue) 
+write_csv(tmp_3_3, "res/res_fishers_exact_pvalue_minus7days_treattime46.csv")
 ```
 
 ```{r}
-tmp4 <- res %>% grab_balance_table() 
-write_csv(tmp4, "res/res_balance_table_minus7days_treattime46.csv")
+tmp_3_4 <- res3 %>% grab_balance_table() 
+write_csv(tmp_3_4, "res/res_balance_table_minus7days_treattime46.csv")
 ```
 
 ```{r}
-res %>% plot_placebos()
-tmp7 <- res %>% plot_placebos()
-tmp7 <- as.data.frame(tmp7$data)
-write_csv(tmp7, "res/res_plot_placebos_minus7days_treattime46.csv")
+res3 %>% plot_placebos()
+tmp_3_5 <- res3 %>% plot_placebos()
+tmp_3_5 <- as.data.frame(tmp_3_5$data)
+write_csv(tmp_3_5, "res/res_plot_placebos_minus7days_treattime46.csv")
 ```
 
 ```{r}
-tmp5 <- as.data.frame(colnames(df))
-write_csv(tmp5, "res/variables.csv")
+tmp_3_6 <- as.data.frame(colnames(df))
+write_csv(tmp_3_6, "res/variables.csv")
 
-tmp6 <- as.data.frame(unique(df$location))
-write_csv(tmp6, "res/country.csv")
+tmp_3_7 <- as.data.frame(unique(df$location))
+write_csv(tmp_3_7, "res/country.csv")
 ```
