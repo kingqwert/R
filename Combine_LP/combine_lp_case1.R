@@ -47,18 +47,19 @@ make.studies = function(N1,N0,m1,m0,Sigma1,Sigma0,cutoff1){
 #######################################
 # Prepare for calculating AUC using our method and conventional methods
 #######################################
-AUC_total_our = matrix(NA,ncol=5,nrow=100)
-AUC_total_mean = matrix(NA,ncol=5,nrow=100)
-AUC_total_study1 =matrix(NA,ncol=5,nrow=100)
-AUC_total_study2 =matrix(NA,ncol=5,nrow=100)
-AUC_total_all = matrix(NA,ncol=5,nrow=100)
+AUC_total_our = matrix(NA,ncol=5,nrow=1000)
+AUC_total_mean = matrix(NA,ncol=5,nrow=1000)
+AUC_total_study1 =matrix(NA,ncol=5,nrow=1000)
+AUC_total_study2 =matrix(NA,ncol=5,nrow=1000)
+AUC_total_all = matrix(NA,ncol=5,nrow=1000)
+WhichAUC = matrix(NA,ncol=5,nrow=1000)
 
 # simulation parameters
 cors = c(-0.3,-0.1,0.1,0.3,0.6) 
 N1=N0=500
 
 for(c in 1:5){
-	for(sim in 1:100){
+	for(sim in 1:1000){
 		studies =list()
 		data.list =list()
 		Ck=list()
@@ -83,6 +84,7 @@ for(c in 1:5){
 
 		
 		# prepare Sigma
+		# Sigma1 = diag(rep(2,10)) %*% R %*% diag(rep(2,10))
 		Sigma1 = diag(c(1:10)) %*% R %*% diag(c(1:10))
 
 		
@@ -114,7 +116,6 @@ for(c in 1:5){
 			
 			studies[[i]] = res.logits(as.matrix(data.list[[i]][,-1]),data.list[[i]]$y)
 		}
-		
 
 
 		
@@ -155,6 +156,8 @@ for(c in 1:5){
 		}
 		
 		pred.our = Reduce('+',score) 
+		# phat_our = 1/(1+exp(-pred.our))
+		# val.prob(phat_our, test$y, cex=.5)
 		AUC_total_our[sim,c]=prediction(pred.our, test$y) %>%
 		  	performance(measure = "auc")%>%
 		  	.@y.values %>% as.numeric
@@ -173,13 +176,14 @@ for(c in 1:5){
 			
 			score.each[[i]] =as.matrix(test[,-1]) %*%beta
 			
+			# phat_each[[i]] = 1/(1+exp(-score.each[[i]]))
+			# val.prob(phat_each[[i]], test$y, cex=.5)
+			
 			AUC.each[i]=prediction(score.each[[i]], test$y) %>%
 		  		performance(measure = "auc")%>%
 		  		.@y.values %>% as.numeric
 		}
 	
-		# AUC_total_each_max[sim,c]=max(AUC.each)
-		# AUC_total_each_mean[sim,c]=mean(AUC.each)
 		AUC_total_study1[sim,c]=AUC.each[1]
 		AUC_total_study2[sim,c]=AUC.each[2]
 
@@ -196,6 +200,30 @@ for(c in 1:5){
 		  		performance(measure = "auc")%>%
 		  		.@y.values %>% as.numeric
 
+		WhichAUC_tmp = which.max(sapply(1:2,function(x){studies[[x]]$AUC.k}))
+		if(WhichAUC_tmp==1){
+			WhichAUC[sim,c] = AUC.each[1]
+		}else if(WhichAUC_tmp==2){
+			WhichAUC[sim,c] = AUC.each[2]
+		}
+
 	}
 }
+
+
+
+AUC_our = AUC_total_our %>% as.data.frame %>% gather(key=correlation,value=AUC,1:5)
+AUC_mean = AUC_total_mean %>% as.data.frame %>% gather(key=correlation,value=AUC,1:5)
+AUC_study1 = AUC_total_study1%>% as.data.frame %>% gather(key=correlation,value=AUC,1:5)
+AUC_study2 = AUC_total_study2 %>% as.data.frame %>% gather(key=correlation,value=AUC,1:5)
+AUC_prior = WhichAUC %>% as.data.frame %>% gather(key=correlation,value=AUC,1:5)
+
+df = cbind(
+	method=factor(c(rep("Our",1000*5),rep("Mean",1000*5),rep("Study 1",1000*5),rep("Study 2",1000*5),rep("AUC prior",1000*5)),levels=c("Our","Mean","Study 1","Study 2","AUC prior")),
+	rbind(AUC_our,AUC_mean,AUC_study1,AUC_study2,AUC_prior)
+	)
+df$correlation=factor(df$correlation,levels=c("V1","V2","V3","V4","V5"),labels=c("-0.3","-0.1","0.1","0.3","0.6"))
+g <- ggplot(df, aes(x = correlation, y = AUC, fill=method))
+g <- g + geom_boxplot()+theme_bw()+ggtitle("")
+g
 
