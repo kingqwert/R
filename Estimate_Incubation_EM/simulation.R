@@ -187,153 +187,124 @@ Boot_Cov = function(y,y_LU,y_C,L){
 }
 
 
-
-
-N_list = c(30,120,510)
-subsample_list = list(
-	c(1/3,1/3,1/3),
-	c(1/5,2/5,2/5),
-	c(3/5,1/5,1/5)
-	)
-samples = NA
-for(i in 1:3){
-	for(j in 1:3){
-		# samples=N_list[i] * subsample_list[[j]]
-		samples=rbind(samples,N_list[i] * subsample_list[[j]])
-	}
-}
-samples = samples[-1,]
-
-meanlog_list=c(0.1,1,1.5)
-sdlog_list=c(0.1,0.5)
-threshold_list=c(-1)
-
-parameter = expand.grid(meanlog_list,sdlog_list,threshold_list)
-
 res = list()
 res_tmp = list()
 LL3 = function(X, m, s, t)(1/((X-t)*s*(2*pi)^0.5))*exp(((-(log(X-t)-m)^2)/(2*s^2)))
 
 
-for(i in 1:dim(samples)[1]){
-	for(j in 1:dim(parameter)[1]){
-		show(c(i,j))
-		N = sum(samples[i,])
-		sample_n = samples[i,1]
-		sample_m = samples[i,2]
-		sample_l = samples[i,3]
-		meanlog = parameter[j,1]
-		sdlog = parameter[j,2]
-		threshold = parameter[j,3]
+N = ***
+sample_n = ***
+sample_m = ***
+sample_l = ***
+meanlog = ***
+sdlog = ***
+threshold = ***
 
-		for(k in 1:1000){
-			# show(k)
+for(k in 1:1000){
+	# show(k)
+	y_true=rlnorm3(N,meanlog=meanlog,sdlog=sdlog,threshold=threshold)
+	
+	if((mean(y_true)+3*sd(y_true))<max(y_true)){
+		while((mean(y_true)+3*sd(y_true))<max(y_true)){
 			y_true=rlnorm3(N,meanlog=meanlog,sdlog=sdlog,threshold=threshold)
-			
-			if((mean(y_true)+3*sd(y_true))<max(y_true)){
-				while((mean(y_true)+3*sd(y_true))<max(y_true)){
-					y_true=rlnorm3(N,meanlog=meanlog,sdlog=sdlog,threshold=threshold)
-				}
-			}
+		}
+	}
 
-			y = y_true[1:sample_n]
-			y_LU = cbind( 
-				runif(sample_m, min = threshold,max = y_true[(sample_n+1):(sample_n+sample_m)]),
-				runif(sample_m, min = y_true[(sample_n+1):(sample_n+sample_m)],max = y_true[(sample_n+1):(sample_n+sample_m)]+1) 
-				)
-			y_C = runif(sample_l, min = threshold, max = y_true[(sample_n+sample_m+1):N])
-			
-			gamma0 = min(min(y),min(y_LU),min(y_C))-0.1
-			mu0 = (sum(log(y-gamma0))+sum(log(y_LU[,1]-gamma0))+sum(log(y_C-gamma0)))/length(y_true)
-			sigma0 = sqrt((sum((log(y-gamma0)-mu0)^2)+sum((log(y_LU[,1]-gamma0)-mu0)^2)+sum((log(y_C-gamma0)-mu0)^2))/length(y_true))
-			
-			theta0 = c(mu0, sigma0, gamma0)
-			
-			theta = try(EM_imcubation_accel(y,y_LU,y_C,theta0,epsilon=0.001,interval=c(threshold*2,gamma0),max_iter=10000)[1])
-			if(class(theta) == "try-error"){
-				y_true=rlnorm3(N,meanlog=meanlog,sdlog=sdlog,threshold=threshold)
-			
-				y = y_true[1:sample_n]
+	y = y_true[1:sample_n]
+	y_LU = cbind( 
+		runif(sample_m, min = threshold,max = y_true[(sample_n+1):(sample_n+sample_m)]),
+		runif(sample_m, min = y_true[(sample_n+1):(sample_n+sample_m)],max = y_true[(sample_n+1):(sample_n+sample_m)]+1) 
+		)
+	y_C = runif(sample_l, min = threshold, max = y_true[(sample_n+sample_m+1):N])
+	
+	gamma0 = min(min(y),min(y_LU),min(y_C))-0.1
+	mu0 = (sum(log(y-gamma0))+sum(log(y_LU[,1]-gamma0))+sum(log(y_C-gamma0)))/length(y_true)
+	sigma0 = sqrt((sum((log(y-gamma0)-mu0)^2)+sum((log(y_LU[,1]-gamma0)-mu0)^2)+sum((log(y_C-gamma0)-mu0)^2))/length(y_true))
+	
+	theta0 = c(mu0, sigma0, gamma0)
+	
+	theta = try(EM_imcubation_accel(y,y_LU,y_C,theta0,epsilon=0.001,interval=c(threshold*2,gamma0),max_iter=10000)[1])
+	if(class(theta) == "try-error"){
+		y_true=rlnorm3(N,meanlog=meanlog,sdlog=sdlog,threshold=threshold)
+	
+		y = y_true[1:sample_n]
 
-				y_LU = cbind( 
-					runif(sample_m, min = threshold,max = y_true[(sample_n+1):(sample_n+sample_m)]),
-					runif(sample_m, min = y_true[(sample_n+1):(sample_n+sample_m)],max = y_true[(sample_n+1):(sample_n+sample_m)]+1) 
-					)
-				# y_C = y_true[(sample_n+sample_m+1):N]-runif(sample_l,0,sdlog)
-				y_C = runif(sample_l, min = threshold, max = y_true[(sample_n+sample_m+1):N])
-				
-				gamma0 = min(min(y),min(y_LU),min(y_C))-0.1
-				mu0 = (sum(log(y-gamma0))+sum(log(y_LU[,1]-gamma0))+sum(log(y_C-gamma0)))/length(y_true)
-				sigma0 = sqrt((sum((log(y-gamma0)-mu0)^2)+sum((log(y_LU[,1]-gamma0)-mu0)^2)+sum((log(y_C-gamma0)-mu0)^2))/length(y_true))
-				
-				theta0 = c(mu0, sigma0, gamma0)
-				
-				theta = try(EM_imcubation_accel(y,y_LU,y_C,theta0,epsilon=0.001,interval=c(threshold*2,gamma0),max_iter=10000)[1])
-			}
-			cov = Boot_Cov(y,y_LU,y_C,L=1000)
-			
-			set = c(N,sample_n,sample_m,sample_l,meanlog,sdlog,threshold)
-			
-			# m: Location Parameter
-			# s: Scale Parameter
-			# t: Threshold Parameter
-			# com1 = try(fitdistr(x=y, densfun=LL3, start=list(m=mu0, s=sigma0, t=min(y)-0.1),method="L-BFGS-B",upper=c(Inf,Inf,min(y)-0.001),lower=c(-Inf,0.0001,-Inf)))
-			com1 = try(optim(par=theta0,ll2,y=y,method="L-BFGS-B",upper=c(Inf,Inf,min(y)-0.01),lower=c(min(y)+0.01,0.0001,-Inf),hessian=T))
+		y_LU = cbind( 
+			runif(sample_m, min = threshold,max = y_true[(sample_n+1):(sample_n+sample_m)]),
+			runif(sample_m, min = y_true[(sample_n+1):(sample_n+sample_m)],max = y_true[(sample_n+1):(sample_n+sample_m)]+1) 
+			)
+		# y_C = y_true[(sample_n+sample_m+1):N]-runif(sample_l,0,sdlog)
+		y_C = runif(sample_l, min = threshold, max = y_true[(sample_n+sample_m+1):N])
+		
+		gamma0 = min(min(y),min(y_LU),min(y_C))-0.1
+		mu0 = (sum(log(y-gamma0))+sum(log(y_LU[,1]-gamma0))+sum(log(y_C-gamma0)))/length(y_true)
+		sigma0 = sqrt((sum((log(y-gamma0)-mu0)^2)+sum((log(y_LU[,1]-gamma0)-mu0)^2)+sum((log(y_C-gamma0)-mu0)^2))/length(y_true))
+		
+		theta0 = c(mu0, sigma0, gamma0)
+		
+		theta = try(EM_imcubation_accel(y,y_LU,y_C,theta0,epsilon=0.001,interval=c(threshold*2,gamma0),max_iter=10000)[1])
+	}
+	cov = Boot_Cov(y,y_LU,y_C,L=1000)
+	
+	set = c(N,sample_n,sample_m,sample_l,meanlog,sdlog,threshold)
+	
+	# m: Location Parameter
+	# s: Scale Parameter
+	# t: Threshold Parameter
+	# com1 = try(fitdistr(x=y, densfun=LL3, start=list(m=mu0, s=sigma0, t=min(y)-0.1),method="L-BFGS-B",upper=c(Inf,Inf,min(y)-0.001),lower=c(-Inf,0.0001,-Inf)))
+	com1 = try(optim(par=theta0,ll2,y=y,method="L-BFGS-B",upper=c(Inf,Inf,min(y)-0.01),lower=c(min(y)+0.01,0.0001,-Inf),hessian=T))
 
-			if(class(com1) == "try-error"){
-				com1 = try(optim(par=theta0,ll2,y=y,method="L-BFGS-B",upper=c(Inf,Inf,min(y)-0.1),lower=c(min(y)+0.1,0.0001,-Inf),hessian=T))
-				
-				if(class(com1) != "try-error"){
-					if(all(eigen(com1$hessian)$values>0)){
-						res_tmp[[k]] = list(
-								set = set,
-								theta = unlist(theta),
-								cov = cov,
-								c1_theta = com1$par,
-								c1_vcov = sqrt(diag(solve(com1$hessian)))
-						)
-					}else{
-						sd = sqrt(diag(solve(Matrix::nearPD(com1$hessian)$mat)))
-						res_tmp[[k]] = list(
-							set = set,
-							theta = unlist(theta),
-							cov = cov,
-							c1_theta = com1$par,
-							c1_vcov = sd
-						)
-					}
-				}else if(class(com1) == "try-error"){
-					res_tmp[[k]] = list(
-						set = set,
-						theta = unlist(theta),
-						cov = cov,
-						c1_theta = NA,
-						c1_vcov = NA)			
-				}
-			}else{
-				if(all(eigen(com1$hessian)$values>0)){
-					res_tmp[[k]] = list(
-							set = set,
-							theta = unlist(theta),
-							cov = cov,
-							c1_theta = com1$par,
-							c1_vcov = sqrt(diag(solve(com1$hessian)))
-					)
-				}else{
-					sd = sqrt(diag(solve(Matrix::nearPD(com1$hessian)$mat)))
-					res_tmp[[k]] = list(
+	if(class(com1) == "try-error"){
+		com1 = try(optim(par=theta0,ll2,y=y,method="L-BFGS-B",upper=c(Inf,Inf,min(y)-0.1),lower=c(min(y)+0.1,0.0001,-Inf),hessian=T))
+		
+		if(class(com1) != "try-error"){
+			if(all(eigen(com1$hessian)$values>0)){
+				res_tmp[[k]] = list(
 						set = set,
 						theta = unlist(theta),
 						cov = cov,
 						c1_theta = com1$par,
-						c1_vcov = sd
-					)
-				}
+						c1_vcov = sqrt(diag(solve(com1$hessian)))
+				)
+			}else{
+				sd = sqrt(diag(solve(Matrix::nearPD(com1$hessian)$mat)))
+				res_tmp[[k]] = list(
+					set = set,
+					theta = unlist(theta),
+					cov = cov,
+					c1_theta = com1$par,
+					c1_vcov = sd
+				)
 			}
-
+		}else if(class(com1) == "try-error"){
+			res_tmp[[k]] = list(
+				set = set,
+				theta = unlist(theta),
+				cov = cov,
+				c1_theta = NA,
+				c1_vcov = NA)			
 		}
-
-		res[[(i-1)*6+j]] = res_tmp
+	}else{
+		if(all(eigen(com1$hessian)$values>0)){
+			res_tmp[[k]] = list(
+					set = set,
+					theta = unlist(theta),
+					cov = cov,
+					c1_theta = com1$par,
+					c1_vcov = sqrt(diag(solve(com1$hessian)))
+			)
+		}else{
+			sd = sqrt(diag(solve(Matrix::nearPD(com1$hessian)$mat)))
+			res_tmp[[k]] = list(
+				set = set,
+				theta = unlist(theta),
+				cov = cov,
+				c1_theta = com1$par,
+				c1_vcov = sd
+			)
+		}
 	}
+
 }
+
 
